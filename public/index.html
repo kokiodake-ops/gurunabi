@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>サクヤぐるなび</title>
+  <style>
+    :root {
+      --bg: #fbf9f6; --card: #fff; --ink: #1e1b18;
+      --sub: #8b8478; --line: #e9e4dc; --accent: #c0552f;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink);
+      font-family:"Hiragino Sans","Yu Gothic UI",sans-serif; line-height:1.7; }
+    .wrap { max-width:720px; margin:0 auto; padding:44px 20px 80px; }
+    h1 { font-size:26px; margin:0 0 4px; }
+    .lead { color:var(--sub); font-size:13px; margin:0 0 32px; }
+    .card { background:var(--card); border:1px solid var(--line);
+      border-radius:12px; padding:24px; margin-bottom:28px; }
+    label { display:block; font-size:12px; color:var(--sub); margin-bottom:6px; }
+    .field { margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    input, select { width:100%; padding:10px 12px; border:1px solid var(--line);
+      border-radius:8px; font-size:14px; font-family:inherit; background:#fff; }
+    input:focus, select:focus { outline:none; border-color:var(--accent); }
+    button { background:var(--accent); color:#fff; border:0; border-radius:8px;
+      padding:10px 22px; font-size:14px; font-family:inherit; cursor:pointer; }
+    button:hover { opacity:.85; }
+    .toolbar { margin-bottom:20px; }
+    .count { font-size:12px; color:var(--sub); margin-bottom:12px; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { background:var(--card); border:1px solid var(--line); border-radius:12px;
+      padding:18px 20px; margin-bottom:12px; position:relative; }
+    .name { font-size:16px; font-weight:600; }
+    .meta { font-size:12px; color:var(--sub); margin-top:2px; }
+    .tag { display:inline-block; background:#f4efe8; color:var(--sub);
+      border-radius:4px; padding:1px 7px; font-size:11px; margin-right:6px; }
+    .del { position:absolute; top:16px; right:16px; background:none;
+      color:var(--sub); padding:4px 8px; font-size:12px; }
+    .del:hover { color:#c0392b; }
+    .empty { text-align:center; color:var(--sub); padding:56px 0;
+      font-size:14px; border:1px dashed var(--line); border-radius:12px; }
+    @media (max-width:560px) { .grid { display:block; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>サクヤぐるなび</h1>
+  <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
+
+  <div class="card">
+    <div class="field">
+      <label for="name">店名</label>
+      <input id="name" placeholder="例：日高屋 渋谷店">
+    </div>
+    <div class="grid">
+      <div class="field">
+        <label for="category">ジャンル</label>
+        <input id="category" placeholder="ラーメン、定食、カレーなど">
+      </div>
+      <div class="field">
+        <label for="walk_min">徒歩（分）</label>
+        <input id="walk_min" type="number" placeholder="5">
+      </div>
+    </div>
+    <div class="grid">
+      <div class="field">
+        <label for="price_range">価格帯</label>
+        <select id="price_range">
+          <option value="">選択</option>
+          <option>〜500円</option>
+          <option>500〜800円</option>
+          <option>800〜1200円</option>
+          <option>1200〜2000円</option>
+          <option>2000円〜</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="address">住所・場所</label>
+        <input id="address" placeholder="ビル名や目印でも可">
+      </div>
+    </div>
+    <button onclick="add()">登録する</button>
+  </div>
+
+  <div class="toolbar">
+    <input id="q" placeholder="店名・ジャンルで検索" oninput="load()">
+  </div>
+
+  <div class="count" id="count"></div>
+  <ul id="list"></ul>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+  async function add() {
+    if (!$("name").value.trim()) return;
+    await fetch("/api/shops", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("name").value,
+        category: $("category").value,
+        walk_min: $("walk_min").value || null,
+        price_range: $("price_range").value,
+        address: $("address").value
+      })
+    });
+    ["name","category","walk_min","address"].forEach(id => $(id).value = "");
+    load();
+  }
+
+  async function remove(id) {
+    if (!confirm("削除しますか？")) return;
+    await fetch("/api/shops/" + id, { method: "DELETE" });
+    load();
+  }
+
+  async function load() {
+    const res = await fetch("/api/shops?q=" + encodeURIComponent($("q").value));
+    const shops = await res.json();
+    $("count").textContent = shops.length ? shops.length + " 件" : "";
+    if (!shops.length) {
+      $("list").innerHTML = '<div class="empty">まだ登録がありません</div>';
+      return;
+    }
+    $("list").innerHTML = shops.map(s => `
+      <li>
+        <button class="del" onclick="remove(${s.id})">削除</button>
+        <div class="name">${esc(s.name)}</div>
+        <div class="meta">
+          ${s.category ? '<span class="tag">' + esc(s.category) + '</span>' : ''}
+          ${s.walk_min ? "徒歩" + esc(s.walk_min) + "分" : ""}
+          ${s.price_range ? " / " + esc(s.price_range) : ""}
+        </div>
+        ${s.address ? '<div class="meta">' + esc(s.address) + '</div>' : ''}
+      </li>
+    `).join("");
+  }
+
+  load();
+</script>
+</body>
+</html>
