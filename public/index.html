@@ -35,6 +35,7 @@ button:hover{opacity:.85;}
 .check label{display:flex;align-items:center;gap:7px;font-size:15px;color:var(--ink);margin:0;cursor:pointer;}
 .check input{width:auto;}
 #pickMap,#viewMap{width:100%;height:260px;border-radius:8px;border:1px solid var(--line);}
+#viewMap{width:100%;height:420px;border-radius:8px;border:1px solid var(--line);}
 .hint{font-size:12px;color:var(--sub);margin-top:6px;}
 .filter{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
 .filter button,.filter select{background:#fff;color:var(--sub);border:1px solid var(--line);padding:8px 18px;font-size:14px;width:auto;}
@@ -153,11 +154,29 @@ function initMaps(){
   new google.maps.Marker({ position: OFFICE, map: viewMap, label: "社", title: "オフィス" });
 }
 
-function toggleMap(){
-  mapOn = !mapOn;
-  $("viewMapBox").className = mapOn ? "card" : "card hide";
-  $("mapToggle").className = mapOn ? "on" : "";
-  if(mapOn){ google.maps.event.trigger(viewMap,"resize"); drawMarkers(); }
+function showOnMap(id){
+  const s = shopsCache.find(x => x.id === id);
+  if(!s) return;
+  if(!s.lat || !s.lng){
+    alert("この店には位置が登録されていません");
+    return;
+  }
+  if(!mapOn){
+    mapOn = true;
+    $("viewMapBox").className = "card";
+    $("mapToggle").className = "on";
+    google.maps.event.trigger(viewMap, "resize");
+    drawMarkers();
+  }
+  viewMap.setCenter({ lat: s.lat, lng: s.lng });
+  viewMap.setZoom(18);
+  $("viewMapBox").scrollIntoView({ behavior: "smooth", block: "center" });
+  const m = viewMarkers.find(mk => mk.getTitle() === s.name);
+  if(m){
+    m.setAnimation(google.maps.Animation.BOUNCE);
+    setTimeout(() => m.setAnimation(null), 2000);
+    google.maps.event.trigger(m, "click");
+  }
 }
 
 function drawMarkers(){
@@ -295,6 +314,7 @@ async function load(){
         </div>
         <div class="acts">
           <button class="icon ${s.faved_by_me?'on':''}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>
+          ${s.lat && s.lng ? `<button class="icon" onclick="showOnMap(${s.id})">地図</button>` : ""}
           <button class="icon" onclick="toggleDetail(${s.id})">口コミ</button>
           ${me.name===s.created_by_name?`<button class="del" onclick="remove(${s.id})">削除</button>`:""}
         </div>
