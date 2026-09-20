@@ -39,6 +39,20 @@ async function init() {
   await pool.query(`ALTER TABLE shops ADD COLUMN IF NOT EXISTS for_lunch BOOLEAN DEFAULT true`);
   await pool.query(`ALTER TABLE shops ADD COLUMN IF NOT EXISTS for_dining BOOLEAN DEFAULT false`);
   await pool.query(`
+    ALTER TABLE shops
+      ADD COLUMN IF NOT EXISTS for_dinner  BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS for_drinks  BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS invoice     BOOLEAN,
+      ADD COLUMN IF NOT EXISTS group_sizes TEXT[] DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS smoking     TEXT,
+      ADD COLUMN IF NOT EXISTS nomihodai   BOOLEAN,
+      ADD COLUMN IF NOT EXISTS drink_price INTEGER,
+      ADD COLUMN IF NOT EXISTS garlic      BOOLEAN,
+      ADD COLUMN IF NOT EXISTS health      TEXT,
+      ADD COLUMN IF NOT EXISTS speed       TEXT,
+      ADD COLUMN IF NOT EXISTS payments    TEXT[] DEFAULT '{}'
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS reviews (
       id SERIAL PRIMARY KEY,
       shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
@@ -132,14 +146,71 @@ app.get("/api/me", (req, res) => {
 
 // ---- 店 ----
 
+// オフィスからの直線距離で徒歩分を概算
+function calcWalkMin(lat, lng) {
+  if (!lat || !lng) return null;
+  const OFFICE = { lat: 35.656555248889305, lng: 139.6951968036949 };
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat - OFFICE.lat);
+  const dLng = toRad(lng - OFFICE.lng);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(OFFICE.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+  const dist = 2 * R * Math.asin(Math.sqrt(a));
+  return Math.max(1, Math.round(dist * 1.3 / 80));
+}
+
+// 選択肢（index.html の ATTRS と揃えること）
+const OPTIONS = {
+  group_sizes: ["1人", "2〜4人", "5〜10人", "11人以上"],
+  smoking: ["禁煙", "電子のみ可", "紙も可"],
+  health: ["ヘルシー", "普通", "ガッツリ"],
+  speed: ["すぐ出る", "普通", "時間かかる"],
+  payments: ["現金", "PayPay", "クレカ"],
+};
+const pickArray = (v, key) => Array.isArray(v) ? v.filter(x => OPTIONS[key].includes(x)) : [];
+const pickOne = (v, key) => OPTIONS[key].includes(v) ? v : null;
+const toBool = v => (v === true || v === false) ? v : null;
+
+const SHOP_COLS = [
+  "name", "category", "address", "price_range",
+  "for_lunch", "for_dinner", "for_dining", "for_drinks",
+  "invoice", "group_sizes", "smoking", "nomihodai", "drink_price",
+  "garlic", "health", "speed", "payments",
+  "lat", "lng", "walk_min",
+];
+
+// フロントからの値をチェックして DB の形に整える。選ばれていない区分の項目は空にする
+function shopFields(b) {
+  const lunch = b.for_lunch === true, dinner = b.for_dinner === true;
+  const dining = b.for_dining === true, drinks = b.for_drinks === true;
+  const meal = lunch || dinner;
+  const price = parseInt(b.drink_price, 10);
+  const lat = b.lat || null, lng = b.lng || null;
+
+  return {
+    name: b.name, category: b.category, address: b.address, price_range: b.price_range,
+    for_lunch: lunch, for_dinner: dinner, for_dining: dining, for_drinks: drinks,
+    invoice:     dining ? toBool(b.invoice) : null,
+    group_sizes: (meal || drinks) ? pickArray(b.group_sizes, "group_sizes") : [],
+    smoking:     drinks ? pickOne(b.smoking, "smoking") : null,
+    nomihodai:   drinks ? toBool(b.nomihodai) : null,
+    drink_price: drinks && price > 0 ? price : null,
+    garlic:      meal ? toBool(b.garlic) : null,
+    health:      meal ? pickOne(b.health, "health") : null,
+    speed:       meal ? pickOne(b.speed, "speed") : null,
+    payments:    pickArray(b.payments, "payments"),
+    lat, lng, walk_min: calcWalkMin(lat, lng),
+  };
+}
+
 app.get("/api/shops", requireLogin, async (req, res) => {
   try {
     const q = req.query.q || "";
     const me = req.session.userId;
-    const purpose = req.query.purpose || "";
-    const cond =
-      purpose === "lunch" ? "AND s.for_lunch = true" :
-      purpose === "dining" ? "AND s.for_dining = true" : "";
+    const PURPOSE_COL = { lunch: "for_lunch", dinner: "for_dinner", dining: "for_dining", drinks: "for_drinks" };
+    const col = PURPOSE_COL[req.query.purpose];
+    const cond = col ? `AND s.${col} = true` : "";
     const maxWalk = Number(req.query.walk) || 0;
     const walkCond = maxWalk ? `AND s.walk_min <= ${maxWalk}` : "";
 
@@ -171,28 +242,13 @@ app.get("/api/shops", requireLogin, async (req, res) => {
 
 app.post("/api/shops", requireLogin, async (req, res) => {
   try {
-    const { name, category, address, price_range, for_lunch, for_dining, lat, lng } = req.body;
-    if (!name) return res.status(400).json({ error: "店名は必須です" });
-
-    // オフィスからの直線距離で徒歩分を概算
-    const OFFICE = { lat: 35.656555248889305, lng: 139.6951968036949 };
-    let walk_min = null;
-    if (lat && lng) {
-      const R = 6371000;
-      const toRad = d => d * Math.PI / 180;
-      const dLat = toRad(lat - OFFICE.lat);
-      const dLng = toRad(lng - OFFICE.lng);
-      const a = Math.sin(dLat/2)**2 +
-                Math.cos(toRad(OFFICE.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng/2)**2;
-      const dist = 2 * R * Math.asin(Math.sqrt(a));
-      walk_min = Math.max(1, Math.round(dist * 1.3 / 80));
-    }
-
+    if (!req.body.name) return res.status(400).json({ error: "店名は必須です" });
+    const f = shopFields(req.body);
+    const ph = SHOP_COLS.map((_, i) => "$" + (i + 1)).join(", ");
     await pool.query(
-      `INSERT INTO shops (name, category, address, price_range, created_by, for_lunch, for_dining, lat, lng, walk_min)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [name, category, address, price_range, req.session.userId,
-       for_lunch !== false, for_dining === true, lat || null, lng || null, walk_min]
+      `INSERT INTO shops (${SHOP_COLS.join(", ")}, created_by)
+       VALUES (${ph}, $${SHOP_COLS.length + 1})`,
+      [...SHOP_COLS.map(c => f[c]), req.session.userId]
     );
     res.json({ ok: true });
   } catch (e) {
@@ -202,6 +258,26 @@ app.post("/api/shops", requireLogin, async (req, res) => {
 });
 
 app.put("/api/shops/:id", requireLogin, async (req, res) => {
+  try {
+    if (!req.body.name) return res.status(400).json({ error: "店名は必須です" });
+    const f = shopFields(req.body);
+    const n = SHOP_COLS.length;
+    const sets = SHOP_COLS.map((c, i) => `${c} = $${i + 1}`).join(", ");
+    const result = await pool.query(
+      `UPDATE shops SET ${sets} WHERE id = $${n + 1} AND created_by = $${n + 2}`,
+      [...SHOP_COLS.map(c => f[c]), req.params.id, req.session.userId]
+    );
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: "自分が登録した店だけ編集できます" });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "更新に失敗しました" });
+  }
+});
+
+app.delete("/api/shops/:id", requireLogin, async (req, res) => {
   try {
     const result = await pool.query(
       "DELETE FROM shops WHERE id = $1 AND created_by = $2",

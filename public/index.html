@@ -61,6 +61,15 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 .review:last-child{border:0;}
 .empty{text-align:center;color:var(--sub);padding:56px 0;font-size:15px;border:1px dashed var(--line);border-radius:12px;}
 .hide{display:none;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{background:#fff;color:var(--sub);border:1px solid var(--line);border-radius:999px;padding:6px 16px;font-size:14px;}
+.chip:hover{opacity:1;border-color:var(--accent);}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.attrs{background:#faf7f2;border-radius:10px;padding:16px 18px 2px;margin-bottom:18px;}
+.attrs:empty{display:none;}
+.tag.dinner{background:#e8eef3;color:#4a6378;}
+.tag.drinks{background:#f3e6ea;color:#8a3b52;}
+.attr{display:inline-block;border:1px solid var(--line);color:var(--sub);border-radius:4px;padding:0 8px;font-size:12px;margin:4px 6px 0 0;}
 @media(max-width:560px){.grid{display:block;}}
 </style>
 </head>
@@ -88,10 +97,7 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 
 <div class="card hide" id="formCard">
   <div class="field"><label>店名</label><input id="name" placeholder="例：日高屋 渋谷店"></div>
-  <div class="check">
-    <label><input type="checkbox" id="for_lunch" checked> 普段の食事</label>
-    <label><input type="checkbox" id="for_dining"> 会食・接待</label>
-  </div>
+  <div id="addForm"></div>
   <div class="grid">
     <div class="field"><label>ジャンル</label><input id="category" placeholder="ラーメン、和食など"></div>
     <div class="field"><label>価格帯</label>
@@ -112,10 +118,7 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 </div>
 <div class="card hide" id="editCard">
   <div class="field"><label>店名</label><input id="e_name"></div>
-  <div class="check">
-    <label><input type="checkbox" id="e_for_lunch"> 普段の食事</label>
-    <label><input type="checkbox" id="e_for_dining"> 会食・接待</label>
-  </div>
+  <div id="editForm"></div>
   <div class="grid">
     <div class="field"><label>ジャンル</label><input id="e_category"></div>
     <div class="field"><label>価格帯</label>
@@ -138,8 +141,10 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 
 <div class="filter hide" id="filter">
   <button id="fAll" class="on" onclick="setPurpose('')">すべて</button>
-  <button id="fLunch" onclick="setPurpose('lunch')">普段の食事</button>
-  <button id="fDining" onclick="setPurpose('dining')">会食・接待</button>
+  <button id="fLunch" onclick="setPurpose('lunch')">昼飯</button>
+  <button id="fDinner" onclick="setPurpose('dinner')">晩飯</button>
+  <button id="fDining" onclick="setPurpose('dining')">会食</button>
+  <button id="fDrinks" onclick="setPurpose('drinks')">飲み屋</button>
   <select id="walkSel" onchange="load()">
     <option value="">徒歩時間</option>
     <option value="3">3分以内</option>
@@ -163,6 +168,112 @@ const OFFICE = { lat: 35.656555248889305, lng: 139.6951968036949 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
+
+// ---- 区分と詳細項目（選択肢は server.js の OPTIONS と揃えること） ----
+const PURPOSES = [
+  { key:"for_lunch",  label:"昼飯",   cls:"" },
+  { key:"for_dinner", label:"晩飯",   cls:"dinner" },
+  { key:"for_dining", label:"会食",   cls:"dining" },
+  { key:"for_drinks", label:"飲み屋", cls:"drinks" },
+];
+const MEAL = ["for_lunch","for_dinner"];
+const ATTRS = [
+  { key:"invoice",     label:"インボイス領収書", type:"bool",  opts:["可","不可"],     show:["for_dining"] },
+  { key:"group_sizes", label:"推奨人数",   type:"multi", opts:["1人","2〜4人","5〜10人","11人以上"], show:[...MEAL,"for_drinks"] },
+  { key:"smoking",     label:"喫煙",       type:"one",   opts:["禁煙","電子のみ可","紙も可"],     show:["for_drinks"] },
+  { key:"nomihodai",   label:"飲み放題",   type:"bool",  opts:["あり","なし"],    show:["for_drinks"] },
+  { key:"drink_price", label:"1杯あたりの値段（円）", type:"num", show:["for_drinks"] },
+  { key:"garlic",      label:"にんにく",   type:"bool",  opts:["あり","なし"],    show:MEAL },
+  { key:"health",      label:"健康度合い", type:"one",   opts:["ヘルシー","普通","ガッツリ"],     show:MEAL },
+  { key:"speed",       label:"提供スピード", type:"one", opts:["すぐ出る","普通","時間かかる"],   show:MEAL },
+  { key:"payments",    label:"決済手段",   type:"multi", opts:["現金","PayPay","クレカ"],        show:null },
+];
+
+// フォームの中身（区分ボタン＋詳細項目）を組み立てる
+function buildForm(root){
+  const chip = (v, text) => `<button class="chip" data-v="${esc(v)}">${esc(text)}</button>`;
+  let html = `<div class="field"><label>区分（複数選択可）</label>
+    <div class="chips" data-t="purpose">${PURPOSES.map(p=>chip(p.key,p.label)).join("")}</div></div>
+    <div class="attrs">`;
+  ATTRS.forEach(a=>{
+    let body;
+    if(a.type==="num") body = `<input type="number" min="0" data-num="${a.key}" placeholder="500" style="max-width:200px">`;
+    else if(a.type==="bool") body = `<div class="chips" data-t="bool" data-k="${a.key}">${chip("true",a.opts[0])}${chip("false",a.opts[1])}</div>`;
+    else body = `<div class="chips" data-t="${a.type}" data-k="${a.key}">${a.opts.map(o=>chip(o,o)).join("")}</div>`;
+    html += `<div class="field" data-show="${a.show?a.show.join(","):""}"><label>${esc(a.label)}${a.type==="multi"?"（複数選択可）":""}</label>${body}</div>`;
+  });
+  root.innerHTML = html + `</div>`;
+  root.addEventListener("click", e=>{
+    const c = e.target.closest(".chip");
+    if(!c) return;
+    const g = c.parentElement, t = g.dataset.t;
+    if(t==="purpose" || t==="multi"){
+      c.classList.toggle("on");
+    }else{
+      const wasOn = c.classList.contains("on");
+      g.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));
+      if(!wasOn) c.classList.add("on");   // もう一度押すと解除
+    }
+    if(t==="purpose") updateVisibility(root);
+  });
+}
+
+// 選ばれている区分に応じて、関係する項目だけ表示する
+function updateVisibility(root){
+  const active = [...root.querySelectorAll('[data-t="purpose"] .chip.on')].map(c=>c.dataset.v);
+  root.querySelectorAll(".field[data-show]").forEach(f=>{
+    const need = f.dataset.show;
+    f.classList.toggle("hide", !!need && !need.split(",").some(k=>active.includes(k)));
+  });
+}
+
+// フォームの値を読む
+function readForm(root){
+  const out = {};
+  root.querySelectorAll(".chips").forEach(g=>{
+    const on = [...g.querySelectorAll(".chip.on")].map(c=>c.dataset.v);
+    const t = g.dataset.t, k = g.dataset.k;
+    if(t==="purpose") PURPOSES.forEach(p=>out[p.key]=on.includes(p.key));
+    else if(t==="multi") out[k] = on;
+    else if(t==="bool") out[k] = on.length ? on[0]==="true" : null;
+    else out[k] = on[0] || null;
+  });
+  root.querySelectorAll("[data-num]").forEach(i=>out[i.dataset.num] = i.value ? Number(i.value) : null);
+  return out;
+}
+
+// 店のデータをフォームに反映する（s が空なら初期状態）
+function fillForm(root, s){
+  root.querySelectorAll(".chips").forEach(g=>{
+    const t = g.dataset.t, k = g.dataset.k;
+    g.querySelectorAll(".chip").forEach(c=>{
+      const v = c.dataset.v;
+      let on;
+      if(t==="purpose") on = !!s[v];
+      else if(t==="multi") on = (s[k]||[]).includes(v);
+      else if(t==="bool") on = s[k]!=null && String(s[k])===v;
+      else on = s[k]===v;
+      c.classList.toggle("on", on);
+    });
+  });
+  root.querySelectorAll("[data-num]").forEach(i=>i.value = s[i.dataset.num] ?? "");
+  updateVisibility(root);
+}
+
+// 一覧カードに出す詳細タグ
+function attrTags(s){
+  const t = [];
+  if(s.invoice!=null) t.push("インボイス"+(s.invoice?"可":"不可"));
+  if(s.group_sizes?.length) t.push("推奨 "+s.group_sizes.join("・"));
+  if(s.smoking) t.push(s.smoking==="禁煙"?"禁煙":"喫煙 "+s.smoking);
+  if(s.nomihodai!=null) t.push("飲み放題"+(s.nomihodai?"あり":"なし"));
+  if(s.drink_price) t.push("1杯 "+s.drink_price+"円");
+  if(s.garlic!=null) t.push("にんにく"+(s.garlic?"あり":"なし"));
+  if(s.health) t.push(s.health);
+  if(s.speed) t.push("提供 "+s.speed);
+  if(s.payments?.length) t.push(s.payments.join("・"));
+  return t.length ? '<div>'+t.map(x=>'<span class="attr">'+esc(x)+'</span>').join("")+'</div>' : "";
+}
 
 let me=null, mode="login", purpose="", openId=null, shopsCache=[];
 let pickMap=null, pickMarker=null, picked=null, viewMap=null, viewMarkers=[], mapOn=false;
@@ -238,8 +349,7 @@ function startEdit(id){
   $("e_category").value = s.category || "";
   $("e_address").value = s.address || "";
   $("e_price_range").value = s.price_range || "";
-  $("e_for_lunch").checked = !!s.for_lunch;
-  $("e_for_dining").checked = !!s.for_dining;
+  fillForm($("editForm"), s);
 
   $("formCard").className = "card hide";
   $("editCard").className = "card";
@@ -270,14 +380,15 @@ function cancelEdit(){
 
 async function saveEdit(){
   if(!$("e_name").value.trim()) return;
+  const cur = shopsCache.find(x => x.id === editingId) || {};
   const res = await fetch("/api/shops/"+editingId, {
     method:"PUT", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({
       name:$("e_name").value, category:$("e_category").value,
       price_range:$("e_price_range").value, address:$("e_address").value,
-      for_lunch:$("e_for_lunch").checked, for_dining:$("e_for_dining").checked,
-      lat: editPicked ? editPicked.lat : null,
-      lng: editPicked ? editPicked.lng : null
+      ...readForm($("editForm")),
+      lat: editPicked ? editPicked.lat : cur.lat,
+      lng: editPicked ? editPicked.lng : cur.lng
     })
   });
   if(!res.ok){ alert((await res.json()).error); return; }
@@ -296,7 +407,9 @@ function setPurpose(p){
   purpose=p;
   $("fAll").className = p===""?"on":"";
   $("fLunch").className = p==="lunch"?"on":"";
+  $("fDinner").className = p==="dinner"?"on":"";
   $("fDining").className = p==="dining"?"on":"";
+  $("fDrinks").className = p==="drinks"?"on":"";
   load();
 }
 
@@ -335,12 +448,14 @@ async function add(){
     body:JSON.stringify({
       name:$("name").value, category:$("category").value,
       price_range:$("price_range").value, address:$("address").value,
-      for_lunch:$("for_lunch").checked, for_dining:$("for_dining").checked,
+      ...readForm($("addForm")),
       lat:picked?picked.lat:null, lng:picked?picked.lng:null
     })
   });
   if(!res.ok){ alert((await res.json()).error); return; }
   ["name","category","address"].forEach(id=>$(id).value="");
+  $("price_range").value="";
+  fillForm($("addForm"), { for_lunch:true });
   if(pickMarker){ pickMarker.setMap(null); pickMarker=null; }
   picked=null;
   $("pickHint").textContent="地図をクリックしてピンを置いてください（徒歩時間が自動計算されます）";
@@ -388,8 +503,7 @@ async function load(){
         <div>
           <div class="name">${esc(s.name)}</div>
           <div class="meta">
-            ${s.for_lunch?'<span class="tag">普段</span>':''}
-            ${s.for_dining?'<span class="tag dining">会食</span>':''}
+            ${PURPOSES.filter(p=>s[p.key]).map(p=>'<span class="tag '+p.cls+'">'+p.label+'</span>').join("")}
             ${s.category?'<span class="tag">'+esc(s.category)+'</span>':''}
             ${s.walk_min?"徒歩"+esc(s.walk_min)+"分":""}
             ${s.price_range?" / "+esc(s.price_range):""}
@@ -398,6 +512,7 @@ async function load(){
             ${Number(s.review_count)?'<span class="stars">'+stars(s.avg_rating)+'</span> '+s.avg_rating+'（'+s.review_count+'件）':'<span style="color:#bbb">評価なし</span>'}
             ${s.avg_price?" / 平均 "+s.avg_price+"円":""}
           </div>
+          ${attrTags(s)}
           ${s.address?'<div class="meta">'+esc(s.address)+'</div>':''}
           ${Number(s.fav_count)?'<div class="meta">♥ '+esc(s.fav_users)+'</div>':''}
         </div>
@@ -440,7 +555,10 @@ async function loadReviews(id){
       </div>`).join("") : '<div class="meta" style="margin-top:10px">まだ口コミがありません</div>');
 }
 
-function boot(){ initMaps(); checkMe().then(load); }
+function boot(){
+  buildForm($("addForm")); buildForm($("editForm"));
+  fillForm($("addForm"), { for_lunch:true });
+  initMaps(); checkMe().then(load); }
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBqTEJ15xCXIJMGG5iRyfTJ9mWnmf79Xik&callback=boot"></script>
 </body>
