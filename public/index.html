@@ -6,15 +6,17 @@
   <title>サクヤぐるなび</title>
   <style>
     :root {
-      --bg: #fbf9f6; --card: #fff; --ink: #1e1b18;
-      --sub: #8b8478; --line: #e9e4dc; --accent: #c0552f;
+      --bg:#fbf9f6; --card:#fff; --ink:#1e1b18;
+      --sub:#8b8478; --line:#e9e4dc; --accent:#c0552f;
     }
-    * { box-sizing: border-box; }
+    * { box-sizing:border-box; }
     body { margin:0; background:var(--bg); color:var(--ink);
       font-family:"Hiragino Sans","Yu Gothic UI",sans-serif; line-height:1.7; }
     .wrap { max-width:720px; margin:0 auto; padding:44px 20px 80px; }
     h1 { font-size:26px; margin:0 0 4px; }
-    .lead { color:var(--sub); font-size:13px; margin:0 0 32px; }
+    .lead { color:var(--sub); font-size:13px; margin:0; }
+    .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; }
+    .who { font-size:13px; color:var(--sub); text-align:right; white-space:nowrap; }
     .card { background:var(--card); border:1px solid var(--line);
       border-radius:12px; padding:24px; margin-bottom:28px; }
     label { display:block; font-size:12px; color:var(--sub); margin-bottom:6px; }
@@ -26,7 +28,12 @@
     button { background:var(--accent); color:#fff; border:0; border-radius:8px;
       padding:10px 22px; font-size:14px; font-family:inherit; cursor:pointer; }
     button:hover { opacity:.85; }
-    .toolbar { margin-bottom:20px; }
+    .link { background:none; color:var(--sub); padding:4px 8px; font-size:12px; text-decoration:underline; }
+    .link:hover { color:var(--accent); }
+    .tabs { display:flex; gap:16px; margin-bottom:20px; }
+    .tabs button { background:none; color:var(--sub); padding:4px 0; border-bottom:2px solid transparent; border-radius:0; }
+    .tabs button.on { color:var(--ink); border-color:var(--accent); font-weight:600; }
+    .err { color:#c0392b; font-size:13px; margin-bottom:12px; }
     .count { font-size:12px; color:var(--sub); margin-bottom:12px; }
     ul { list-style:none; padding:0; margin:0; }
     li { background:var(--card); border:1px solid var(--line); border-radius:12px;
@@ -40,15 +47,41 @@
     .del:hover { color:#c0392b; }
     .empty { text-align:center; color:var(--sub); padding:56px 0;
       font-size:14px; border:1px dashed var(--line); border-radius:12px; }
+    .hide { display:none; }
     @media (max-width:560px) { .grid { display:block; } }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>サクヤぐるなび</h1>
-  <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
 
-  <div class="card">
+  <div class="head">
+    <div>
+      <h1>サクヤぐるなび</h1>
+      <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
+    </div>
+    <div class="who" id="who"></div>
+  </div>
+
+  <!-- 未ログイン -->
+  <div class="card hide" id="authCard">
+    <div class="tabs">
+      <button id="tabLogin" class="on" onclick="setMode('login')">ログイン</button>
+      <button id="tabRegister" onclick="setMode('register')">新規登録</button>
+    </div>
+    <div class="err hide" id="authErr"></div>
+    <div class="field">
+      <label for="authName">名前</label>
+      <input id="authName" placeholder="大嶽">
+    </div>
+    <div class="field">
+      <label for="authPass">パスワード</label>
+      <input id="authPass" type="password" placeholder="8文字以上">
+    </div>
+    <button onclick="submitAuth()" id="authBtn">ログイン</button>
+  </div>
+
+  <!-- ログイン済み -->
+  <div class="card hide" id="formCard">
     <div class="field">
       <label for="name">店名</label>
       <input id="name" placeholder="例：日高屋 渋谷店">
@@ -83,9 +116,7 @@
     <button onclick="add()">登録する</button>
   </div>
 
-  <div class="toolbar">
-    <input id="q" placeholder="店名・ジャンルで検索" oninput="load()">
-  </div>
+  <input id="q" placeholder="店名・ジャンルで検索" oninput="load()" style="margin-bottom:20px">
 
   <div class="count" id="count"></div>
   <ul id="list"></ul>
@@ -96,9 +127,57 @@
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
+  let me = null;
+  let mode = "login";
+
+  function setMode(m) {
+    mode = m;
+    $("tabLogin").className = m === "login" ? "on" : "";
+    $("tabRegister").className = m === "register" ? "on" : "";
+    $("authBtn").textContent = m === "login" ? "ログイン" : "登録する";
+    $("authErr").className = "err hide";
+  }
+
+  async function submitAuth() {
+    const res = await fetch("/api/" + (mode === "login" ? "login" : "register"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("authName").value, password: $("authPass").value })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      $("authErr").textContent = data.error;
+      $("authErr").className = "err";
+      return;
+    }
+    $("authPass").value = "";
+    await checkMe();
+    load();
+  }
+
+  async function logout() {
+    await fetch("/api/logout", { method: "POST" });
+    await checkMe();
+    load();
+  }
+
+  async function checkMe() {
+    const res = await fetch("/api/me");
+    me = await res.json();
+    if (me) {
+      $("who").innerHTML = esc(me.name) + ' <button class="link" onclick="logout()">ログアウト</button>';
+      $("authCard").className = "card hide";
+      $("formCard").className = "card";
+    } else {
+      $("who").textContent = "";
+      $("authCard").className = "card";
+      $("formCard").className = "card hide";
+    }
+  }
+
   async function add() {
     if (!$("name").value.trim()) return;
-    await fetch("/api/shops", {
+    const res = await fetch("/api/shops", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -109,13 +188,23 @@
         address: $("address").value
       })
     });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error);
+      return;
+    }
     ["name","category","walk_min","address"].forEach(id => $(id).value = "");
     load();
   }
 
   async function remove(id) {
     if (!confirm("削除しますか？")) return;
-    await fetch("/api/shops/" + id, { method: "DELETE" });
+    const res = await fetch("/api/shops/" + id, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error);
+      return;
+    }
     load();
   }
 
@@ -129,7 +218,8 @@
     }
     $("list").innerHTML = shops.map(s => `
       <li>
-        <button class="del" onclick="remove(${s.id})">削除</button>
+        ${me && me.name === s.created_by_name
+          ? `<button class="del" onclick="remove(${s.id})">削除</button>` : ""}
         <div class="name">${esc(s.name)}</div>
         <div class="meta">
           ${s.category ? '<span class="tag">' + esc(s.category) + '</span>' : ''}
@@ -137,11 +227,12 @@
           ${s.price_range ? " / " + esc(s.price_range) : ""}
         </div>
         ${s.address ? '<div class="meta">' + esc(s.address) + '</div>' : ''}
+        ${s.created_by_name ? '<div class="meta">登録: ' + esc(s.created_by_name) + '</div>' : ''}
       </li>
     `).join("");
   }
 
-  load();
+  checkMe().then(load);
 </script>
 </body>
 </html>
