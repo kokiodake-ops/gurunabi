@@ -1,238 +1,295 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>サクヤぐるなび</title>
-  <style>
-    :root {
-      --bg:#fbf9f6; --card:#fff; --ink:#1e1b18;
-      --sub:#8b8478; --line:#e9e4dc; --accent:#c0552f;
-    }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--bg); color:var(--ink);
-      font-family:"Hiragino Sans","Yu Gothic UI",sans-serif; line-height:1.7; }
-    .wrap { max-width:720px; margin:0 auto; padding:44px 20px 80px; }
-    h1 { font-size:26px; margin:0 0 4px; }
-    .lead { color:var(--sub); font-size:13px; margin:0; }
-    .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; }
-    .who { font-size:13px; color:var(--sub); text-align:right; white-space:nowrap; }
-    .card { background:var(--card); border:1px solid var(--line);
-      border-radius:12px; padding:24px; margin-bottom:28px; }
-    label { display:block; font-size:12px; color:var(--sub); margin-bottom:6px; }
-    .field { margin-bottom:16px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    input, select { width:100%; padding:10px 12px; border:1px solid var(--line);
-      border-radius:8px; font-size:14px; font-family:inherit; background:#fff; }
-    input:focus, select:focus { outline:none; border-color:var(--accent); }
-    button { background:var(--accent); color:#fff; border:0; border-radius:8px;
-      padding:10px 22px; font-size:14px; font-family:inherit; cursor:pointer; }
-    button:hover { opacity:.85; }
-    .link { background:none; color:var(--sub); padding:4px 8px; font-size:12px; text-decoration:underline; }
-    .link:hover { color:var(--accent); }
-    .tabs { display:flex; gap:16px; margin-bottom:20px; }
-    .tabs button { background:none; color:var(--sub); padding:4px 0; border-bottom:2px solid transparent; border-radius:0; }
-    .tabs button.on { color:var(--ink); border-color:var(--accent); font-weight:600; }
-    .err { color:#c0392b; font-size:13px; margin-bottom:12px; }
-    .count { font-size:12px; color:var(--sub); margin-bottom:12px; }
-    ul { list-style:none; padding:0; margin:0; }
-    li { background:var(--card); border:1px solid var(--line); border-radius:12px;
-      padding:18px 20px; margin-bottom:12px; position:relative; }
-    .name { font-size:16px; font-weight:600; }
-    .meta { font-size:12px; color:var(--sub); margin-top:2px; }
-    .tag { display:inline-block; background:#f4efe8; color:var(--sub);
-      border-radius:4px; padding:1px 7px; font-size:11px; margin-right:6px; }
-    .del { position:absolute; top:16px; right:16px; background:none;
-      color:var(--sub); padding:4px 8px; font-size:12px; }
-    .del:hover { color:#c0392b; }
-    .empty { text-align:center; color:var(--sub); padding:56px 0;
-      font-size:14px; border:1px dashed var(--line); border-radius:12px; }
-    .hide { display:none; }
-    @media (max-width:560px) { .grid { display:block; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サクヤぐるなび</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fbf9f6;--card:#fff;--ink:#1e1b18;--sub:#8b8478;--line:#e9e4dc;--accent:#c0552f;--gold:#d9a441;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP","Hiragino Sans",sans-serif;line-height:1.8;letter-spacing:.02em;}
+.wrap{max-width:720px;margin:0 auto;padding:44px 20px 80px;}
+h1{font-size:26px;margin:0 0 4px;font-weight:700;}
+.lead{color:var(--sub);font-size:13px;margin:0;}
+.head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;}
+.who{font-size:13px;color:var(--sub);text-align:right;white-space:nowrap;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px;}
+label{display:block;font-size:12px;color:var(--sub);margin-bottom:6px;}
+.field{margin-bottom:16px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+textarea{resize:vertical;min-height:60px;}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:14px;font-family:inherit;cursor:pointer;}
+button:hover{opacity:.85;}
+.link{background:none;color:var(--sub);padding:4px 8px;font-size:12px;text-decoration:underline;}
+.link:hover{color:var(--accent);}
+.tabs{display:flex;gap:16px;margin-bottom:20px;}
+.tabs button{background:none;color:var(--sub);padding:4px 0;border-bottom:2px solid transparent;border-radius:0;}
+.tabs button.on{color:var(--ink);border-color:var(--accent);font-weight:700;}
+.err{color:#c0392b;font-size:13px;margin-bottom:12px;}
+.check{display:flex;gap:20px;margin-bottom:16px;}
+.check label{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);margin:0;cursor:pointer;}
+.check input{width:auto;}
+.filter{display:flex;gap:10px;margin-bottom:16px;}
+.filter button{background:#fff;color:var(--sub);border:1px solid var(--line);padding:6px 16px;font-size:13px;}
+.filter button.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.count{font-size:12px;color:var(--sub);margin-bottom:12px;}
+ul{list-style:none;padding:0;margin:0;}
+li{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:12px;}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+.name{font-size:16px;font-weight:700;}
+.meta{font-size:12px;color:var(--sub);margin-top:2px;}
+.tag{display:inline-block;background:#f4efe8;color:var(--sub);border-radius:4px;padding:1px 7px;font-size:11px;margin-right:6px;}
+.tag.dining{background:#f3ece1;color:#8a6d3b;}
+.stars{color:var(--gold);font-size:14px;letter-spacing:1px;}
+.acts{display:flex;gap:8px;align-items:center;white-space:nowrap;}
+.icon{background:none;color:var(--sub);padding:4px 8px;font-size:13px;border:1px solid var(--line);border-radius:6px;}
+.icon.on{color:var(--accent);border-color:var(--accent);}
+.icon:hover{border-color:var(--accent);}
+.del{background:none;color:var(--sub);padding:4px 8px;font-size:12px;}
+.del:hover{color:#c0392b;}
+.detail{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.review{font-size:13px;padding:8px 0;border-bottom:1px dashed var(--line);}
+.review:last-child{border:0;}
+.empty{text-align:center;color:var(--sub);padding:56px 0;font-size:14px;border:1px dashed var(--line);border-radius:12px;}
+.hide{display:none;}
+@media(max-width:560px){.grid{display:block;}}
+</style>
 </head>
 <body>
 <div class="wrap">
 
-  <div class="head">
-    <div>
-      <h1>サクヤぐるなび</h1>
-      <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
-    </div>
-    <div class="who" id="who"></div>
+<div class="head">
+  <div>
+    <h1>サクヤぐるなび</h1>
+    <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
   </div>
+  <div class="who" id="who"></div>
+</div>
 
-  <!-- 未ログイン -->
-  <div class="card hide" id="authCard">
-    <div class="tabs">
-      <button id="tabLogin" class="on" onclick="setMode('login')">ログイン</button>
-      <button id="tabRegister" onclick="setMode('register')">新規登録</button>
-    </div>
-    <div class="err hide" id="authErr"></div>
-    <div class="field">
-      <label for="authName">名前</label>
-      <input id="authName" placeholder="大嶽">
-    </div>
-    <div class="field">
-      <label for="authPass">パスワード</label>
-      <input id="authPass" type="password" placeholder="8文字以上">
-    </div>
-    <button onclick="submitAuth()" id="authBtn">ログイン</button>
+<div class="card hide" id="authCard">
+  <div class="tabs">
+    <button id="tabLogin" class="on" onclick="setMode('login')">ログイン</button>
+    <button id="tabRegister" onclick="setMode('register')">新規登録</button>
   </div>
+  <div class="err hide" id="authErr"></div>
+  <div class="field"><label>名前</label><input id="authName" placeholder="大嶽"></div>
+  <div class="field"><label>パスワード</label><input id="authPass" type="password" placeholder="8文字以上"></div>
+  <button onclick="submitAuth()" id="authBtn">ログイン</button>
+</div>
 
-  <!-- ログイン済み -->
-  <div class="card hide" id="formCard">
-    <div class="field">
-      <label for="name">店名</label>
-      <input id="name" placeholder="例：日高屋 渋谷店">
-    </div>
-    <div class="grid">
-      <div class="field">
-        <label for="category">ジャンル</label>
-        <input id="category" placeholder="ラーメン、定食、カレーなど">
-      </div>
-      <div class="field">
-        <label for="walk_min">徒歩（分）</label>
-        <input id="walk_min" type="number" placeholder="5">
-      </div>
-    </div>
-    <div class="grid">
-      <div class="field">
-        <label for="price_range">価格帯</label>
-        <select id="price_range">
-          <option value="">選択</option>
-          <option>〜500円</option>
-          <option>500〜800円</option>
-          <option>800〜1200円</option>
-          <option>1200〜2000円</option>
-          <option>2000円〜</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="address">住所・場所</label>
-        <input id="address" placeholder="ビル名や目印でも可">
-      </div>
-    </div>
-    <button onclick="add()">登録する</button>
+<div class="card hide" id="formCard">
+  <div class="field"><label>店名</label><input id="name" placeholder="例：日高屋 渋谷店"></div>
+  <div class="check">
+    <label><input type="checkbox" id="for_lunch" checked> 普段の食事</label>
+    <label><input type="checkbox" id="for_dining"> 会食・接待</label>
   </div>
+  <div class="grid">
+    <div class="field"><label>ジャンル</label><input id="category" placeholder="ラーメン、和食など"></div>
+    <div class="field"><label>徒歩（分）</label><input id="walk_min" type="number" placeholder="5"></div>
+  </div>
+  <div class="grid">
+    <div class="field"><label>価格帯</label>
+      <select id="price_range">
+        <option value="">選択</option>
+        <option>〜500円</option><option>500〜800円</option><option>800〜1200円</option>
+        <option>1200〜2000円</option><option>2000〜5000円</option><option>5000円〜</option>
+      </select>
+    </div>
+    <div class="field"><label>住所・場所</label><input id="address" placeholder="ビル名や目印でも可"></div>
+  </div>
+  <button onclick="add()">登録する</button>
+</div>
 
-  <input id="q" placeholder="店名・ジャンルで検索" oninput="load()" style="margin-bottom:20px">
+<div class="filter hide" id="filter">
+  <button id="fAll" class="on" onclick="setPurpose('')">すべて</button>
+  <button id="fLunch" onclick="setPurpose('lunch')">普段の食事</button>
+  <button id="fDining" onclick="setPurpose('dining')">会食・接待</button>
+</div>
 
-  <div class="count" id="count"></div>
-  <ul id="list"></ul>
+<input id="q" class="hide" placeholder="店名・ジャンルで検索" oninput="load()" style="margin-bottom:16px">
+
+<div class="count" id="count"></div>
+<ul id="list"></ul>
 </div>
 
 <script>
-  const $ = id => document.getElementById(id);
-  const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
-    ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
 
-  let me = null;
-  let mode = "login";
+let me = null, mode = "login", purpose = "", openId = null;
 
-  function setMode(m) {
-    mode = m;
-    $("tabLogin").className = m === "login" ? "on" : "";
-    $("tabRegister").className = m === "register" ? "on" : "";
-    $("authBtn").textContent = m === "login" ? "ログイン" : "登録する";
-    $("authErr").className = "err hide";
+function setMode(m){
+  mode = m;
+  $("tabLogin").className = m === "login" ? "on" : "";
+  $("tabRegister").className = m === "register" ? "on" : "";
+  $("authBtn").textContent = m === "login" ? "ログイン" : "登録する";
+  $("authErr").className = "err hide";
+}
+
+function setPurpose(p){
+  purpose = p;
+  $("fAll").className = p === "" ? "on" : "";
+  $("fLunch").className = p === "lunch" ? "on" : "";
+  $("fDining").className = p === "dining" ? "on" : "";
+  load();
+}
+
+async function submitAuth(){
+  const res = await fetch("/api/" + (mode === "login" ? "login" : "register"), {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name:$("authName").value, password:$("authPass").value})
+  });
+  const data = await res.json();
+  if(!res.ok){ $("authErr").textContent = data.error; $("authErr").className = "err"; return; }
+  $("authPass").value = "";
+  await checkMe(); load();
+}
+
+async function logout(){
+  await fetch("/api/logout",{method:"POST"});
+  openId = null;
+  await checkMe(); load();
+}
+
+async function checkMe(){
+  me = await (await fetch("/api/me")).json();
+  if(me){
+    $("who").innerHTML = esc(me.name) + ' <button class="link" onclick="logout()">ログアウト</button>';
+    $("authCard").className = "card hide";
+    $("formCard").className = "card";
+    $("filter").className = "filter";
+    $("q").className = "";
+  }else{
+    $("who").textContent = "";
+    $("authCard").className = "card";
+    $("formCard").className = "card hide";
+    $("filter").className = "filter hide";
+    $("q").className = "hide";
   }
+}
 
-  async function submitAuth() {
-    const res = await fetch("/api/" + (mode === "login" ? "login" : "register"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: $("authName").value, password: $("authPass").value })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      $("authErr").textContent = data.error;
-      $("authErr").className = "err";
-      return;
-    }
-    $("authPass").value = "";
-    await checkMe();
-    load();
+async function add(){
+  if(!$("name").value.trim()) return;
+  const res = await fetch("/api/shops",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name:$("name").value, category:$("category").value,
+      walk_min:$("walk_min").value||null, price_range:$("price_range").value,
+      address:$("address").value,
+      for_lunch:$("for_lunch").checked, for_dining:$("for_dining").checked
+    })
+  });
+  if(!res.ok){ alert((await res.json()).error); return; }
+  ["name","category","walk_min","address"].forEach(id=>$(id).value="");
+  load();
+}
+
+async function remove(id){
+  if(!confirm("削除しますか？")) return;
+  const res = await fetch("/api/shops/"+id,{method:"DELETE"});
+  if(!res.ok){ alert((await res.json()).error); return; }
+  load();
+}
+
+async function toggleFav(id){
+  const res = await fetch("/api/shops/"+id+"/favorite",{method:"POST"});
+  if(!res.ok){ alert((await res.json()).error); return; }
+  load();
+}
+
+function toggleDetail(id){
+  openId = openId === id ? null : id;
+  load();
+}
+
+async function postReview(id){
+  const res = await fetch("/api/shops/"+id+"/reviews",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      rating: Number($("rt"+id).value),
+      comment: $("cm"+id).value,
+      paid_price: $("pp"+id).value || null
+    })
+  });
+  if(!res.ok){ alert((await res.json()).error); return; }
+  load();
+}
+
+async function load(){
+  if(!me){
+    $("count").textContent = "";
+    $("list").innerHTML = "";
+    return;
   }
+  const res = await fetch("/api/shops?q="+encodeURIComponent($("q").value)+"&purpose="+purpose);
+  if(!res.ok){ await checkMe(); return; }
+  const shops = await res.json();
+  $("count").textContent = shops.length ? shops.length+" 件" : "";
+  if(!shops.length){ $("list").innerHTML = '<div class="empty">まだ登録がありません</div>'; return; }
 
-  async function logout() {
-    await fetch("/api/logout", { method: "POST" });
-    await checkMe();
-    load();
-  }
-
-  async function checkMe() {
-    const res = await fetch("/api/me");
-    me = await res.json();
-    if (me) {
-      $("who").innerHTML = esc(me.name) + ' <button class="link" onclick="logout()">ログアウト</button>';
-      $("authCard").className = "card hide";
-      $("formCard").className = "card";
-    } else {
-      $("who").textContent = "";
-      $("authCard").className = "card";
-      $("formCard").className = "card hide";
-    }
-  }
-
-  async function add() {
-    if (!$("name").value.trim()) return;
-    const res = await fetch("/api/shops", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: $("name").value,
-        category: $("category").value,
-        walk_min: $("walk_min").value || null,
-        price_range: $("price_range").value,
-        address: $("address").value
-      })
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      alert(data.error);
-      return;
-    }
-    ["name","category","walk_min","address"].forEach(id => $(id).value = "");
-    load();
-  }
-
-  async function remove(id) {
-    if (!confirm("削除しますか？")) return;
-    const res = await fetch("/api/shops/" + id, { method: "DELETE" });
-    if (!res.ok) {
-      const data = await res.json();
-      alert(data.error);
-      return;
-    }
-    load();
-  }
-
-  async function load() {
-    const res = await fetch("/api/shops?q=" + encodeURIComponent($("q").value));
-    const shops = await res.json();
-    $("count").textContent = shops.length ? shops.length + " 件" : "";
-    if (!shops.length) {
-      $("list").innerHTML = '<div class="empty">まだ登録がありません</div>';
-      return;
-    }
-    $("list").innerHTML = shops.map(s => `
-      <li>
-        ${me && me.name === s.created_by_name
-          ? `<button class="del" onclick="remove(${s.id})">削除</button>` : ""}
-        <div class="name">${esc(s.name)}</div>
-        <div class="meta">
-          ${s.category ? '<span class="tag">' + esc(s.category) + '</span>' : ''}
-          ${s.walk_min ? "徒歩" + esc(s.walk_min) + "分" : ""}
-          ${s.price_range ? " / " + esc(s.price_range) : ""}
+  $("list").innerHTML = shops.map(s => `
+    <li>
+      <div class="row">
+        <div>
+          <div class="name">${esc(s.name)}</div>
+          <div class="meta">
+            ${s.for_lunch ? '<span class="tag">普段</span>' : ''}
+            ${s.for_dining ? '<span class="tag dining">会食</span>' : ''}
+            ${s.category ? '<span class="tag">'+esc(s.category)+'</span>' : ''}
+            ${s.walk_min ? "徒歩"+esc(s.walk_min)+"分" : ""}
+            ${s.price_range ? " / "+esc(s.price_range) : ""}
+          </div>
+          <div class="meta">
+            ${Number(s.review_count) ? '<span class="stars">'+stars(s.avg_rating)+'</span> '+s.avg_rating+'（'+s.review_count+'件）' : '<span style="color:#bbb">評価なし</span>'}
+            ${s.avg_price ? " / 平均 "+s.avg_price+"円" : ""}
+          </div>
+          ${s.address ? '<div class="meta">'+esc(s.address)+'</div>' : ''}
+          ${Number(s.fav_count) ? '<div class="meta">♥ '+esc(s.fav_users)+'</div>' : ''}
         </div>
-        ${s.address ? '<div class="meta">' + esc(s.address) + '</div>' : ''}
-        ${s.created_by_name ? '<div class="meta">登録: ' + esc(s.created_by_name) + '</div>' : ''}
-      </li>
-    `).join("");
-  }
+        <div class="acts">
+          <button class="icon ${s.faved_by_me?'on':''}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>
+          <button class="icon" onclick="toggleDetail(${s.id})">口コミ</button>
+          ${me.name === s.created_by_name ? `<button class="del" onclick="remove(${s.id})">削除</button>` : ""}
+        </div>
+      </div>
+      <div class="detail ${openId === s.id ? '' : 'hide'}" id="d${s.id}"></div>
+    </li>
+  `).join("");
 
-  checkMe().then(load);
+  if(openId) loadReviews(openId);
+}
+
+async function loadReviews(id){
+  const box = $("d"+id);
+  if(!box) return;
+  const res = await fetch("/api/shops/"+id+"/reviews");
+  if(!res.ok) return;
+  const reviews = await res.json();
+  box.innerHTML = `
+    <div class="grid" style="margin-bottom:10px">
+      <div class="field" style="margin:0"><label>評価</label>
+        <select id="rt${id}"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select>
+      </div>
+      <div class="field" style="margin:0"><label>払った金額</label><input id="pp${id}" type="number" placeholder="900"></div>
+    </div>
+    <div class="field"><textarea id="cm${id}" placeholder="何がおいしい、混み具合、何時なら入れるなど"></textarea></div>
+    <button onclick="postReview(${id})">口コミを書く</button>
+  ` + (reviews.length ? reviews.map(r => `
+      <div class="review">
+        <span class="stars">${stars(r.rating)}</span>
+        <strong>${esc(r.user_name)}</strong>
+        ${r.paid_price ? '<span class="meta">'+r.paid_price+'円</span>' : ''}
+        <div>${esc(r.comment||"")}</div>
+      </div>`).join("") : '<div class="meta" style="margin-top:10px">まだ口コミがありません</div>');
+}
+
+checkMe().then(load);
 </script>
 </body>
 </html>

@@ -36,6 +36,28 @@ async function init() {
     )
   `);
   await pool.query(`ALTER TABLE shops ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`);
+  await pool.query(`ALTER TABLE shops ADD COLUMN IF NOT EXISTS for_lunch BOOLEAN DEFAULT true`);
+  await pool.query(`ALTER TABLE shops ADD COLUMN IF NOT EXISTS for_dining BOOLEAN DEFAULT false`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id SERIAL PRIMARY KEY,
+      shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      comment TEXT,
+      paid_price INTEGER,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (shop_id, user_id)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (user_id, shop_id)
+    )
+  `);
 }
 init();
 
@@ -48,7 +70,6 @@ app.use(session({
 }));
 app.use(express.static("public"));
 
-// ログイン必須にするための関門
 function requireLogin(req, res, next) {
   if (!req.session.userId) {
     return res.status(401).json({ error: "ログインしてください" });
@@ -89,11 +110,9 @@ app.post("/api/login", async (req, res) => {
     const { name, password } = req.body;
     const result = await pool.query("SELECT * FROM users WHERE name = $1", [name]);
     const user = result.rows[0];
-
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ error: "名前かパスワードが違います" });
     }
-
     req.session.userId = user.id;
     req.session.userName = user.name;
     res.json({ name: user.name });
@@ -113,15 +132,33 @@ app.get("/api/me", (req, res) => {
 
 // ---- 店 ----
 
-app.get("/api/shops", async (req, res) => {
+app.get("/api/shops", requireLogin, async (req, res) => {
   try {
     const q = req.query.q || "";
+    const me = req.session.userId;
+    const purpose = req.query.purpose || "";
+    const cond =
+      purpose === "lunch" ? "AND s.for_lunch = true" :
+      purpose === "dining" ? "AND s.for_dining = true" : "";
+
     const result = await pool.query(
-      `SELECT s.*, u.name AS created_by_name
-       FROM shops s LEFT JOIN users u ON s.created_by = u.id
-       WHERE s.name ILIKE $1 OR s.category ILIKE $1
+      `SELECT s.*,
+              u.name AS created_by_name,
+              COALESCE(AVG(r.rating), 0)::numeric(3,1) AS avg_rating,
+              COUNT(DISTINCT r.id) AS review_count,
+              AVG(r.paid_price)::int AS avg_price,
+              COUNT(DISTINCT f.user_id) AS fav_count,
+              BOOL_OR(f.user_id = $2) AS faved_by_me,
+              STRING_AGG(DISTINCT fu.name, ', ') AS fav_users
+       FROM shops s
+       LEFT JOIN users u ON s.created_by = u.id
+       LEFT JOIN reviews r ON r.shop_id = s.id
+       LEFT JOIN favorites f ON f.shop_id = s.id
+       LEFT JOIN users fu ON fu.id = f.user_id
+       WHERE (s.name ILIKE $1 OR s.category ILIKE $1) ${cond}
+       GROUP BY s.id, u.name
        ORDER BY s.created_at DESC`,
-      ["%" + q + "%"]
+      ["%" + q + "%", me]
     );
     res.json(result.rows);
   } catch (e) {
@@ -132,12 +169,13 @@ app.get("/api/shops", async (req, res) => {
 
 app.post("/api/shops", requireLogin, async (req, res) => {
   try {
-    const { name, category, address, walk_min, price_range } = req.body;
+    const { name, category, address, walk_min, price_range, for_lunch, for_dining } = req.body;
     if (!name) return res.status(400).json({ error: "店名は必須です" });
     await pool.query(
-      `INSERT INTO shops (name, category, address, walk_min, price_range, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [name, category, address, walk_min || null, price_range, req.session.userId]
+      `INSERT INTO shops (name, category, address, walk_min, price_range, created_by, for_lunch, for_dining)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [name, category, address, walk_min || null, price_range, req.session.userId,
+       for_lunch !== false, for_dining === true]
     );
     res.json({ ok: true });
   } catch (e) {
@@ -159,6 +197,65 @@ app.delete("/api/shops/:id", requireLogin, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "削除に失敗しました" });
+  }
+});
+
+// ---- 口コミ ----
+
+app.get("/api/shops/:id/reviews", requireLogin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT r.*, u.name AS user_name
+       FROM reviews r JOIN users u ON r.user_id = u.id
+       WHERE r.shop_id = $1 ORDER BY r.created_at DESC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "取得に失敗しました" });
+  }
+});
+
+app.post("/api/shops/:id/reviews", requireLogin, async (req, res) => {
+  try {
+    const { rating, comment, paid_price } = req.body;
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "評価は1〜5で選んでください" });
+    }
+    await pool.query(
+      `INSERT INTO reviews (shop_id, user_id, rating, comment, paid_price)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (shop_id, user_id)
+       DO UPDATE SET rating = $3, comment = $4, paid_price = $5, created_at = NOW()`,
+      [req.params.id, req.session.userId, rating, comment, paid_price || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "投稿に失敗しました" });
+  }
+});
+
+// ---- お気に入り ----
+
+app.post("/api/shops/:id/favorite", requireLogin, async (req, res) => {
+  try {
+    const del = await pool.query(
+      "DELETE FROM favorites WHERE user_id = $1 AND shop_id = $2",
+      [req.session.userId, req.params.id]
+    );
+    if (del.rowCount === 0) {
+      await pool.query(
+        "INSERT INTO favorites (user_id, shop_id) VALUES ($1, $2)",
+        [req.session.userId, req.params.id]
+      );
+      return res.json({ faved: true });
+    }
+    res.json({ faved: false });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "操作に失敗しました" });
   }
 });
 
