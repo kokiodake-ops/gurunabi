@@ -140,6 +140,8 @@ app.get("/api/shops", requireLogin, async (req, res) => {
     const cond =
       purpose === "lunch" ? "AND s.for_lunch = true" :
       purpose === "dining" ? "AND s.for_dining = true" : "";
+    const maxWalk = Number(req.query.walk) || 0;
+    const walkCond = maxWalk ? `AND s.walk_min <= ${maxWalk}` : "";
 
     const result = await pool.query(
       `SELECT s.*,
@@ -155,7 +157,7 @@ app.get("/api/shops", requireLogin, async (req, res) => {
        LEFT JOIN reviews r ON r.shop_id = s.id
        LEFT JOIN favorites f ON f.shop_id = s.id
        LEFT JOIN users fu ON fu.id = f.user_id
-       WHERE (s.name ILIKE $1 OR s.category ILIKE $1) ${cond}
+       WHERE (s.name ILIKE $1 OR s.category ILIKE $1) ${cond} ${walkCond}
        GROUP BY s.id, u.name
        ORDER BY s.created_at DESC`,
       ["%" + q + "%", me]
@@ -169,13 +171,28 @@ app.get("/api/shops", requireLogin, async (req, res) => {
 
 app.post("/api/shops", requireLogin, async (req, res) => {
   try {
-    const { name, category, address, walk_min, price_range, for_lunch, for_dining } = req.body;
+    const { name, category, address, price_range, for_lunch, for_dining, lat, lng } = req.body;
     if (!name) return res.status(400).json({ error: "店名は必須です" });
+
+    // オフィスからの直線距離で徒歩分を概算
+    const OFFICE = { lat: 35.656555248889305, lng: 139.6951968036949 };
+    let walk_min = null;
+    if (lat && lng) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat - OFFICE.lat);
+      const dLng = toRad(lng - OFFICE.lng);
+      const a = Math.sin(dLat/2)**2 +
+                Math.cos(toRad(OFFICE.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng/2)**2;
+      const dist = 2 * R * Math.asin(Math.sqrt(a));
+      walk_min = Math.max(1, Math.round(dist * 1.3 / 80));
+    }
+
     await pool.query(
-      `INSERT INTO shops (name, category, address, walk_min, price_range, created_by, for_lunch, for_dining)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [name, category, address, walk_min || null, price_range, req.session.userId,
-       for_lunch !== false, for_dining === true]
+      `INSERT INTO shops (name, category, address, price_range, created_by, for_lunch, for_dining, lat, lng, walk_min)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [name, category, address, price_range, req.session.userId,
+       for_lunch !== false, for_dining === true, lat || null, lng || null, walk_min]
     );
     res.json({ ok: true });
   } catch (e) {
