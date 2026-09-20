@@ -166,6 +166,7 @@ const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n))
 
 let me=null, mode="login", purpose="", openId=null, shopsCache=[];
 let pickMap=null, pickMarker=null, picked=null, viewMap=null, viewMarkers=[], mapOn=false;
+let editMap=null, editMarker=null, editPicked=null, editingId=null;
 
 function initMaps(){
   pickMap = new google.maps.Map($("pickMap"), { center: OFFICE, zoom: 16, mapTypeControl:false, streetViewControl:false });
