@@ -36,6 +36,7 @@ button:hover{opacity:.85;}
 .check input{width:auto;}
 #pickMap,#viewMap{width:100%;height:260px;border-radius:8px;border:1px solid var(--line);}
 #viewMap{width:100%;height:420px;border-radius:8px;border:1px solid var(--line);}
+#editMap{width:100%;height:260px;border-radius:8px;border:1px solid var(--line);}
 .hint{font-size:12px;color:var(--sub);margin-top:6px;}
 .filter{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
 .filter button,.filter select{background:#fff;color:var(--sub);border:1px solid var(--line);padding:8px 18px;font-size:14px;width:auto;}
@@ -109,6 +110,31 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
   </div>
   <button onclick="add()">登録する</button>
 </div>
+<div class="card hide" id="editCard">
+  <div class="field"><label>店名</label><input id="e_name"></div>
+  <div class="check">
+    <label><input type="checkbox" id="e_for_lunch"> 普段の食事</label>
+    <label><input type="checkbox" id="e_for_dining"> 会食・接待</label>
+  </div>
+  <div class="grid">
+    <div class="field"><label>ジャンル</label><input id="e_category"></div>
+    <div class="field"><label>価格帯</label>
+      <select id="e_price_range">
+        <option value="">選択</option>
+        <option>〜500円</option><option>500〜800円</option><option>800〜1200円</option>
+        <option>1200〜2000円</option><option>2000〜5000円</option><option>5000円〜</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><label>住所・場所</label><input id="e_address"></div>
+  <div class="field">
+    <label>場所を地図で指定</label>
+    <div id="editMap"></div>
+    <div class="hint" id="editHint"></div>
+  </div>
+  <button onclick="saveEdit()">保存する</button>
+  <button class="link" onclick="cancelEdit()">キャンセル</button>
+</div>
 
 <div class="filter hide" id="filter">
   <button id="fAll" class="on" onclick="setPurpose('')">すべて</button>
@@ -149,6 +175,14 @@ function initMaps(){
     if(pickMarker) pickMarker.setMap(null);
     pickMarker = new google.maps.Marker({ position: e.latLng, map: pickMap });
     $("pickHint").textContent = "ピンを置きました（クリックし直すと変更できます）";
+  });
+    editMap = new google.maps.Map($("editMap"), { center: OFFICE, zoom: 16, mapTypeControl:false, streetViewControl:false });
+  new google.maps.Marker({ position: OFFICE, map: editMap, label: "社", title: "オフィス" });
+  editMap.addListener("click", e => {
+    editPicked = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    if(editMarker) editMarker.setMap(null);
+    editMarker = new google.maps.Marker({ position: e.latLng, map: editMap });
+    $("editHint").textContent = "位置を変更しました";
   });
   viewMap = new google.maps.Map($("viewMap"), { center: OFFICE, zoom: 16, mapTypeControl:false, streetViewControl:false });
   new google.maps.Marker({ position: OFFICE, map: viewMap, label: "社", title: "オフィス" });
@@ -194,7 +228,61 @@ function drawMarkers(){
     viewMarkers.push(m);
   });
 }
+function startEdit(id){
+  const s = shopsCache.find(x => x.id === id);
+  if(!s) return;
+  editingId = id;
+  editPicked = null;
+  $("e_name").value = s.name || "";
+  $("e_category").value = s.category || "";
+  $("e_address").value = s.address || "";
+  $("e_price_range").value = s.price_range || "";
+  $("e_for_lunch").checked = !!s.for_lunch;
+  $("e_for_dining").checked = !!s.for_dining;
 
+  $("formCard").className = "card hide";
+  $("editCard").className = "card";
+  google.maps.event.trigger(editMap, "resize");
+
+  if(editMarker){ editMarker.setMap(null); editMarker = null; }
+  if(s.lat && s.lng){
+    const pos = { lat: s.lat, lng: s.lng };
+    editMarker = new google.maps.Marker({ position: pos, map: editMap });
+    editMap.setCenter(pos);
+    editMap.setZoom(17);
+    $("editHint").textContent = "現在の位置です。変えたい場合は地図をクリックしてください";
+  }else{
+    editMap.setCenter(OFFICE);
+    editMap.setZoom(16);
+    $("editHint").textContent = "位置が未登録です。地図をクリックしてピンを置いてください";
+  }
+  $("editCard").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+function cancelEdit(){
+  editingId = null;
+  editPicked = null;
+  if(editMarker){ editMarker.setMap(null); editMarker = null; }
+  $("editCard").className = "card hide";
+  $("formCard").className = "card";
+}
+
+async function saveEdit(){
+  if(!$("e_name").value.trim()) return;
+  const res = await fetch("/api/shops/"+editingId, {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name:$("e_name").value, category:$("e_category").value,
+      price_range:$("e_price_range").value, address:$("e_address").value,
+      for_lunch:$("e_for_lunch").checked, for_dining:$("e_for_dining").checked,
+      lat: editPicked ? editPicked.lat : null,
+      lng: editPicked ? editPicked.lng : null
+    })
+  });
+  if(!res.ok){ alert((await res.json()).error); return; }
+  cancelEdit();
+  load();
+}
 function setMode(m){
   mode=m;
   $("tabLogin").className = m==="login"?"on":"";
@@ -316,6 +404,7 @@ async function load(){
           <button class="icon ${s.faved_by_me?'on':''}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>
           ${s.lat && s.lng ? `<button class="icon" onclick="showOnMap(${s.id})">地図</button>` : ""}
           <button class="icon" onclick="toggleDetail(${s.id})">口コミ</button>
+          <button class="icon" onclick="startEdit(${s.id})">編集</button>
           ${me.name===s.created_by_name?`<button class="del" onclick="remove(${s.id})">削除</button>`:""}
         </div>
       </div>

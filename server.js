@@ -201,7 +201,7 @@ app.post("/api/shops", requireLogin, async (req, res) => {
   }
 });
 
-app.delete("/api/shops/:id", requireLogin, async (req, res) => {
+app.put("/api/shops/:id", requireLogin, async (req, res) => {
   try {
     const result = await pool.query(
       "DELETE FROM shops WHERE id = $1 AND created_by = $2",
