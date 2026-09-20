@@ -50,7 +50,9 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 .tag{display:inline-block;background:#f4efe8;color:var(--sub);border-radius:4px;padding:2px 9px;font-size:12px;margin-right:6px;}
 .tag.dining{background:#f3ece1;color:#8a6d3b;}
 .stars{color:var(--gold);font-size:15px;letter-spacing:1px;}
-.acts{display:flex;gap:8px;align-items:center;white-space:nowrap;}
+.row>div:first-child{flex:1;min-width:0;}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;}
+.acts button{white-space:nowrap;}
 .icon{background:none;color:var(--sub);padding:6px 12px;font-size:14px;border:1px solid var(--line);border-radius:6px;}
 .icon.on{color:var(--accent);border-color:var(--accent);}
 .icon:hover{border-color:var(--accent);}
@@ -70,7 +72,22 @@ li{background:var(--card);border:1px solid var(--line);border-radius:12px;paddin
 .tag.dinner{background:#e8eef3;color:#4a6378;}
 .tag.drinks{background:#f3e6ea;color:#8a3b52;}
 .attr{display:inline-block;border:1px solid var(--line);color:var(--sub);border-radius:4px;padding:0 8px;font-size:12px;margin:4px 6px 0 0;}
-@media(max-width:560px){.grid{display:block;}}
+@media(max-width:560px){
+  .wrap{padding:24px 14px 60px;}
+  h1{font-size:22px;}
+  .head{margin-bottom:18px;}
+  .card{padding:18px;}
+  .grid{display:block;}
+  /* 絞り込みボタンは折り返さず横スクロール */
+  .filter{flex-wrap:nowrap;overflow-x:auto;margin:0 -14px 14px;padding:0 14px 4px;}
+  .filter button,.filter select{flex-shrink:0;padding:8px 14px;}
+  /* 店カード：情報を上、ボタンを下に */
+  li{padding:16px;}
+  .row{flex-direction:column;gap:12px;}
+  .acts{width:100%;justify-content:flex-start;}
+  .icon{padding:6px 12px;}
+  #viewMap{height:320px;}
+}
 </style>
 </head>
 <body>
