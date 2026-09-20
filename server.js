@@ -164,7 +164,3 @@ app.delete("/api/shops/:id", requireLogin, async (req, res) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log("running on port " + port));
-});
-
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log("running on port " + port));
