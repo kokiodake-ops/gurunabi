@@ -82,7 +82,8 @@ app.use(session({
   saveUninitialized: false,
   cookie: { maxAge: 1000 * 60 * 60 * 24 * 30 }
 }));
-app.use(express.static("public"));
+// .html を省略した URL（/login, /shop?id=3 など）でも開けるようにする
+app.use(express.static("public", { extensions: ["html"] }));
 
 function requireLogin(req, res, next) {
   if (!req.session.userId) {
@@ -141,7 +142,7 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
-  res.json(req.session.userId ? { name: req.session.userName } : null);
+  res.json(req.session.userId ? { id: req.session.userId, name: req.session.userName } : null);
 });
 
 // ---- 店 ----
@@ -204,10 +205,25 @@ function shopFields(b) {
   };
 }
 
+// 一覧・詳細で共通の SELECT（$2 はログイン中のユーザーID）
+const SHOP_SELECT = `
+  SELECT s.*,
+         u.name AS created_by_name,
+         COALESCE(AVG(r.rating), 0)::numeric(3,1) AS avg_rating,
+         COUNT(DISTINCT r.id) AS review_count,
+         AVG(r.paid_price)::int AS avg_price,
+         COUNT(DISTINCT f.user_id) AS fav_count,
+         BOOL_OR(f.user_id = $2) AS faved_by_me,
+         STRING_AGG(DISTINCT fu.name, ', ') AS fav_users
+  FROM shops s
+  LEFT JOIN users u ON s.created_by = u.id
+  LEFT JOIN reviews r ON r.shop_id = s.id
+  LEFT JOIN favorites f ON f.shop_id = s.id
+  LEFT JOIN users fu ON fu.id = f.user_id`;
+
 app.get("/api/shops", requireLogin, async (req, res) => {
   try {
     const q = req.query.q || "";
-    const me = req.session.userId;
     const PURPOSE_COL = { lunch: "for_lunch", dinner: "for_dinner", dining: "for_dining", drinks: "for_drinks" };
     const col = PURPOSE_COL[req.query.purpose];
     const cond = col ? `AND s.${col} = true` : "";
@@ -215,25 +231,28 @@ app.get("/api/shops", requireLogin, async (req, res) => {
     const walkCond = maxWalk ? `AND s.walk_min <= ${maxWalk}` : "";
 
     const result = await pool.query(
-      `SELECT s.*,
-              u.name AS created_by_name,
-              COALESCE(AVG(r.rating), 0)::numeric(3,1) AS avg_rating,
-              COUNT(DISTINCT r.id) AS review_count,
-              AVG(r.paid_price)::int AS avg_price,
-              COUNT(DISTINCT f.user_id) AS fav_count,
-              BOOL_OR(f.user_id = $2) AS faved_by_me,
-              STRING_AGG(DISTINCT fu.name, ', ') AS fav_users
-       FROM shops s
-       LEFT JOIN users u ON s.created_by = u.id
-       LEFT JOIN reviews r ON r.shop_id = s.id
-       LEFT JOIN favorites f ON f.shop_id = s.id
-       LEFT JOIN users fu ON fu.id = f.user_id
+      `${SHOP_SELECT}
        WHERE (s.name ILIKE $1 OR s.category ILIKE $1) ${cond} ${walkCond}
        GROUP BY s.id, u.name
        ORDER BY s.created_at DESC`,
-      ["%" + q + "%", me]
+      ["%" + q + "%", req.session.userId]
     );
     res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "取得に失敗しました" });
+  }
+});
+
+app.get("/api/shops/:id", requireLogin, async (req, res) => {
+  try {
+    if (!/^\d+$/.test(req.params.id)) return res.status(404).json({ error: "店が見つかりません" });
+    const result = await pool.query(
+      `${SHOP_SELECT} WHERE s.id = $1 GROUP BY s.id, u.name`,
+      [req.params.id, req.session.userId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "店が見つかりません" });
+    res.json(result.rows[0]);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "取得に失敗しました" });
@@ -245,12 +264,12 @@ app.post("/api/shops", requireLogin, async (req, res) => {
     if (!req.body.name) return res.status(400).json({ error: "店名は必須です" });
     const f = shopFields(req.body);
     const ph = SHOP_COLS.map((_, i) => "$" + (i + 1)).join(", ");
-    await pool.query(
+    const result = await pool.query(
       `INSERT INTO shops (${SHOP_COLS.join(", ")}, created_by)
-       VALUES (${ph}, $${SHOP_COLS.length + 1})`,
+       VALUES (${ph}, $${SHOP_COLS.length + 1}) RETURNING id`,
       [...SHOP_COLS.map(c => f[c]), req.session.userId]
     );
-    res.json({ ok: true });
+    res.json({ ok: true, id: result.rows[0].id });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "登録に失敗しました" });
@@ -353,4 +372,4 @@ app.post("/api/shops/:id/favorite", requireLogin, async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log("running on port " + port));
+app.listen(port, () => console.log("running on port " + port));
