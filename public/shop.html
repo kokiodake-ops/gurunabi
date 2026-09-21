@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サクヤぐるなび</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+<div id="main" class="hide">
+  <div class="page-head stack">
+    <div>
+      <h1 id="name"></h1>
+      <div class="meta" id="tags"></div>
+    </div>
+    <div class="acts" id="acts"></div>
+  </div>
+
+  <div class="card">
+    <h2>店の情報</h2>
+    <dl class="info" id="info"></dl>
+  </div>
+
+  <div class="card" id="mapCard">
+    <h2>場所</h2>
+    <div class="map" id="map"></div>
+  </div>
+
+  <div class="card">
+    <h2>口コミ <span class="meta" id="ratingSummary"></span></h2>
+    <div class="grid">
+      <div class="field"><label>評価</label>
+        <select id="rating">
+          <option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option>
+          <option value="2">★★</option><option value="1">★</option>
+        </select>
+      </div>
+      <div class="field"><label>払った金額（円）</label><input id="paid" type="number" placeholder="900"></div>
+    </div>
+    <div class="field"><textarea id="comment" placeholder="何がおいしい、混み具合、何時なら入れるなど"></textarea></div>
+    <button onclick="postReview()">口コミを書く</button>
+    <div id="reviews" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<div class="empty hide" id="notFound">店が見つかりません。<a href="/">一覧に戻る</a></div>
+
+</div>
+<script src="/js/common.js"></script>
+<script>
+const id = param("id");
+let me, shop;
+
+async function load() {
+  shop = await api("/api/shops/" + id);
+  const s = shop;
+  $("name").textContent = s.name;
+  $("tags").innerHTML = purposeTags(s) + (s.category ? `<span class="tag">${esc(s.category)}</span>` : "");
+
+  const mine = s.created_by === me.id;
+  $("acts").innerHTML = `
+    <button class="icon ${s.faved_by_me ? "on" : ""}" onclick="toggleFav()">♥ ${s.fav_count}</button>
+    ${mine ? `<a class="icon" href="/edit?id=${s.id}">編集</a>
+              <button class="del" onclick="remove()">削除</button>` : ""}`;
+
+  // 基本情報 → 詳細項目 の順に、入力されているものだけ並べる
+  const rows = [
+    ["区分", PURPOSES.filter(p => s[p.key]).map(p => p.label).join("・")],
+    ["ジャンル", s.category],
+    ["価格帯", s.price_range],
+    ["徒歩", s.walk_min ? s.walk_min + "分" : null],
+    ["住所・場所", s.address],
+    ...ATTRS.map(a => [a.label, attrText(a, s)]),
+    ["お気に入り", Number(s.fav_count) ? s.fav_users : null],
+    ["登録者", s.created_by_name],
+  ].filter(([, v]) => v);
+  $("info").innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+
+  $("ratingSummary").innerHTML = Number(s.review_count)
+    ? `<span class="stars">${stars(s.avg_rating)}</span> ${s.avg_rating}（${s.review_count}件）${s.avg_price ? " / 平均 " + s.avg_price + "円" : ""}`
+    : "";
+}
+
+async function loadReviews() {
+  const reviews = await api(`/api/shops/${id}/reviews`);
+  $("reviews").innerHTML = reviews.length
+    ? reviews.map(r => `
+      <div class="review">
+        <span class="stars">${stars(r.rating)}</span>
+        <strong>${esc(r.user_name)}</strong>
+        ${r.paid_price ? `<span class="meta">${r.paid_price}円</span>` : ""}
+        <div>${esc(r.comment || "")}</div>
+      </div>`).join("")
+    : '<div class="meta">まだ口コミがありません</div>';
+}
+
+async function showMap() {
+  if (!shop.lat || !shop.lng) { $("mapCard").classList.add("hide"); return; }
+  await loadMaps();
+  const pos = { lat: shop.lat, lng: shop.lng };
+  const map = makeMap($("map"), pos, 17);
+  new google.maps.Marker({ position: pos, map, title: shop.name });
+}
+
+async function toggleFav() {
+  try { await api(`/api/shops/${id}/favorite`, { method: "POST" }); load(); }
+  catch (e) { alert(e.message); }
+}
+
+async function remove() {
+  if (!confirm(`「${shop.name}」を削除しますか？`)) return;
+  try { await api("/api/shops/" + id, { method: "DELETE" }); location.href = "/"; }
+  catch (e) { alert(e.message); }
+}
+
+async function postReview() {
+  try {
+    await api(`/api/shops/${id}/reviews`, {
+      method: "POST",
+      body: { rating: Number($("rating").value), comment: $("comment").value, paid_price: $("paid").value || null },
+    });
+    $("comment").value = ""; $("paid").value = "";
+    load(); loadReviews();
+  } catch (e) { alert(e.message); }
+}
+
+(async () => {
+  me = await requireMe();
+  try {
+    await load();
+  } catch (e) {
+    renderHeader(me, [{ label: "店一覧", href: "/" }, { label: "見つかりません" }]);
+    $("notFound").classList.remove("hide");
+    return;
+  }
+  renderHeader(me, [{ label: "店一覧", href: "/" }, { label: shop.name }]);
+  $("main").classList.remove("hide");
+  loadReviews();
+  showMap();
+})();
+</script>
+</body>
+</html>

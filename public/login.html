@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サクヤぐるなび</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap" style="max-width:440px;padding-top:32px">
+
+<div class="card">
+  <div class="tabs">
+    <button id="tabLogin" class="on" onclick="setMode('login')">ログイン</button>
+    <button id="tabRegister" onclick="setMode('register')">新規登録</button>
+  </div>
+
+  <div class="notice">
+    ⚠ このサイトは HTTP（暗号化なし）で通信しています。<br>
+    <strong>普段使っているパスワードを流用しないでください。</strong>
+  </div>
+
+  <div class="err hide" id="err"></div>
+  <div class="field"><label>名前</label><input id="name" placeholder="大嶽" autocomplete="username"></div>
+  <div class="field">
+    <label>パスワード</label>
+    <div class="pw">
+      <input id="pass" type="password" placeholder="8文字以上" autocomplete="current-password">
+      <button type="button" id="pwToggle" onclick="togglePw()">表示</button>
+    </div>
+  </div>
+  <button onclick="submitAuth()" id="submitBtn" style="width:100%">ログイン</button>
+</div>
+
+</div>
+<script src="/js/common.js"></script>
+<script>
+let mode = "login";
+
+function setMode(m) {
+  mode = m;
+  $("tabLogin").className = m === "login" ? "on" : "";
+  $("tabRegister").className = m === "register" ? "on" : "";
+  $("submitBtn").textContent = m === "login" ? "ログイン" : "登録する";
+  $("pass").autocomplete = m === "login" ? "current-password" : "new-password";
+  $("err").classList.add("hide");
+}
+
+function togglePw() {
+  const show = $("pass").type === "password";
+  $("pass").type = show ? "text" : "password";
+  $("pwToggle").textContent = show ? "隠す" : "表示";
+}
+
+// ログイン後の戻り先（外部サイトへ飛ばされないよう、/ で始まるパスだけ許可）
+function nextUrl() {
+  const n = param("next");
+  return n && n.startsWith("/") && !n.startsWith("//") ? n : "/";
+}
+
+async function submitAuth() {
+  try {
+    await api("/api/" + mode, { method: "POST", body: { name: $("name").value, password: $("pass").value } });
+    location.href = nextUrl();
+  } catch (e) {
+    $("err").textContent = e.message;
+    $("err").classList.remove("hide");
+  }
+}
+
+$("pass").addEventListener("keydown", e => { if (e.key === "Enter") submitAuth(); });
+
+(async () => {
+  renderHeader(null);
+  if (await api("/api/me")) location.href = nextUrl();   // ログイン済みなら一覧へ
+})();
+</script>
+</body>
+</html>

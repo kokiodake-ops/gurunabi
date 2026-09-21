@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サクヤぐるなび</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+<div class="page-head">
+  <div>
+    <h1>店一覧</h1>
+    <p class="lead">プライムプラザ周辺の飯屋ナレッジを貯めよう</p>
+  </div>
+  <a class="btn sm" href="/new">＋ 店を登録</a>
+</div>
+
+<div class="filter">
+  <button data-p="" onclick="setPurpose('')">すべて</button>
+  <button data-p="lunch" onclick="setPurpose('lunch')">昼飯</button>
+  <button data-p="dinner" onclick="setPurpose('dinner')">晩飯</button>
+  <button data-p="dining" onclick="setPurpose('dining')">会食</button>
+  <button data-p="drinks" onclick="setPurpose('drinks')">飲み屋</button>
+  <select id="walk" onchange="load()">
+    <option value="">徒歩時間</option>
+    <option value="3">3分以内</option>
+    <option value="5">5分以内</option>
+    <option value="10">10分以内</option>
+    <option value="15">15分以内</option>
+  </select>
+  <a href="/map">地図で見る</a>
+</div>
+
+<input id="q" placeholder="店名・ジャンルで検索" style="margin-bottom:16px">
+
+<div class="count" id="count"></div>
+<ul id="list"></ul>
+
+</div>
+<script src="/js/common.js"></script>
+<script>
+let purpose = param("purpose") || "";
+
+function setPurpose(p) { purpose = p; load(); }
+
+// 絞り込み条件を URL に残す（詳細から「戻る」で帰ってきても条件が消えない）
+function saveState() {
+  const u = new URLSearchParams();
+  if (purpose) u.set("purpose", purpose);
+  if ($("walk").value) u.set("walk", $("walk").value);
+  if ($("q").value) u.set("q", $("q").value);
+  history.replaceState(null, "", "/" + (u.toString() ? "?" + u : ""));
+}
+
+async function load() {
+  document.querySelectorAll(".filter [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === purpose));
+  saveState();
+  const shops = await api(`/api/shops?q=${encodeURIComponent($("q").value)}&purpose=${purpose}&walk=${$("walk").value}`);
+
+  $("count").textContent = shops.length ? shops.length + " 件" : "";
+  if (!shops.length) { $("list").innerHTML = '<div class="empty">条件に合う店がありません</div>'; return; }
+
+  $("list").innerHTML = shops.map(s => `
+    <li class="shop" data-id="${s.id}">
+      <div>
+        <a class="name" href="/shop?id=${s.id}">${esc(s.name)}</a>
+        <div class="meta">
+          ${purposeTags(s)}
+          ${s.category ? `<span class="tag">${esc(s.category)}</span>` : ""}
+          ${s.walk_min ? "徒歩" + esc(s.walk_min) + "分" : ""}
+          ${s.price_range ? " / " + esc(s.price_range) : ""}
+        </div>
+        <div class="meta">
+          ${Number(s.review_count)
+            ? `<span class="stars">${stars(s.avg_rating)}</span> ${s.avg_rating}（${s.review_count}件）`
+            : '<span style="color:#bbb">評価なし</span>'}
+          ${s.avg_price ? " / 平均 " + s.avg_price + "円" : ""}
+        </div>
+        ${attrTags(s)}
+      </div>
+      <button class="icon ${s.faved_by_me ? "on" : ""}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>
+    </li>`).join("");
+}
+
+async function toggleFav(id) {
+  try { await api(`/api/shops/${id}/favorite`, { method: "POST" }); load(); }
+  catch (e) { alert(e.message); }
+}
+
+// カードのどこを押しても詳細へ（♥ボタンとリンクは除く）
+$("list").addEventListener("click", e => {
+  if (e.target.closest("button, a")) return;
+  const li = e.target.closest("li.shop");
+  if (li) location.href = "/shop?id=" + li.dataset.id;
+});
+
+let timer;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 250); });
+
+(async () => {
+  const me = await requireMe();
+  renderHeader(me, [{ label: "店一覧", href: "/" }]);
+  $("walk").value = param("walk") || "";
+  $("q").value = param("q") || "";
+  load();
+})();
+</script>
+</body>
+</html>
