@@ -116,6 +116,8 @@ const ATTRS = [
   { key: "payments",    label: "決済手段",   type: "multi", opts: ["現金", "PayPay", "クレカ"], show: null },
 ];
 
+const PRICE_RANGES = ["〜500円", "500〜800円", "800〜1200円", "1200〜2000円", "2000〜5000円", "5000円〜"];
+
 const purposeTags = s =>
   PURPOSES.filter(p => s[p.key]).map(p => `<span class="tag ${p.cls}">${p.label}</span>`).join("");
 

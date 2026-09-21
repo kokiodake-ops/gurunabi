@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="wide">
 <div class="wrap">
 
 <div class="page-head">
@@ -39,52 +39,109 @@
 <input id="q" placeholder="店名・ジャンルで検索" style="margin-bottom:16px">
 
 <div class="count" id="count"></div>
-<ul id="list"></ul>
+<div id="list"></div>
 
 </div>
 <script src="/js/common.js"></script>
 <script>
 let purpose = param("purpose") || "";
+let sortKey = param("sort") || "";
+let sortDir = param("dir") === "desc" ? "desc" : "asc";
+let shops = [];
+
+const PURPOSE_KEY = { lunch: "for_lunch", dinner: "for_dinner", dining: "for_dining", drinks: "for_drinks" };
+const none = '<span class="none">—</span>';
+
+// 表の列。show がある列は、その区分で絞り込んだときだけ表示する
+// sort: 並び替えに使う値（null は常に末尾）
+const COLS = [
+  { key: "name", label: "店名", cls: "sticky",
+    render: s => `<a href="/shop?id=${s.id}">${esc(s.name)}</a>`, sort: s => s.name },
+  { key: "purpose", label: "区分", render: s => purposeTags(s) || none,
+    sort: s => PURPOSES.findIndex(p => s[p.key]) },
+  { key: "category", label: "ジャンル", cls: "clip", sort: s => s.category || null },
+  { key: "walk_min", label: "徒歩", cls: "num",
+    render: s => s.walk_min ? s.walk_min + "分" : none, sort: s => s.walk_min },
+  { key: "price_range", label: "価格帯",
+    sort: s => s.price_range ? PRICE_RANGES.indexOf(s.price_range) : null },
+  { key: "avg_rating", label: "評価",
+    render: s => Number(s.review_count)
+      ? `<span class="stars">${stars(s.avg_rating)}</span> ${s.avg_rating}（${s.review_count}）` : none,
+    sort: s => Number(s.review_count) ? Number(s.avg_rating) : null },
+  { key: "avg_price", label: "平均支払", cls: "num",
+    render: s => s.avg_price ? s.avg_price + "円" : none, sort: s => s.avg_price },
+  ...ATTRS.map(a => ({
+    key: a.key, label: a.label, show: a.show, cls: a.type === "num" ? "num" : "",
+    render: s => esc(attrText(a, s) ?? "") || none,
+    sort: s => a.type === "num" ? s[a.key] : attrText(a, s),
+  })),
+  { key: "fav_count", label: "♥", cls: "num",
+    render: s => `<button class="icon ${s.faved_by_me ? "on" : ""}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>`,
+    sort: s => Number(s.fav_count) },
+  { key: "created_by_name", label: "登録者", sort: s => s.created_by_name || null },
+];
+
+function visibleCols() {
+  const k = PURPOSE_KEY[purpose];
+  return COLS.filter(c => !c.show || !k || c.show.includes(k));
+}
 
 function setPurpose(p) { purpose = p; load(); }
 
-// 絞り込み条件を URL に残す（詳細から「戻る」で帰ってきても条件が消えない）
+function setSort(key) {
+  if (sortKey === key) sortDir = sortDir === "asc" ? "desc" : "asc";
+  else { sortKey = key; sortDir = "asc"; }
+  render();
+}
+
+// 絞り込み・並び順を URL に残す（詳細から「戻る」で帰ってきても条件が消えない）
 function saveState() {
   const u = new URLSearchParams();
   if (purpose) u.set("purpose", purpose);
   if ($("walk").value) u.set("walk", $("walk").value);
   if ($("q").value) u.set("q", $("q").value);
+  if (sortKey) { u.set("sort", sortKey); u.set("dir", sortDir); }
   history.replaceState(null, "", "/" + (u.toString() ? "?" + u : ""));
 }
 
 async function load() {
   document.querySelectorAll(".filter [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === purpose));
-  saveState();
-  const shops = await api(`/api/shops?q=${encodeURIComponent($("q").value)}&purpose=${purpose}&walk=${$("walk").value}`);
+  shops = await api(`/api/shops?q=${encodeURIComponent($("q").value)}&purpose=${purpose}&walk=${$("walk").value}`);
+  render();
+}
 
+function render() {
+  saveState();
   $("count").textContent = shops.length ? shops.length + " 件" : "";
   if (!shops.length) { $("list").innerHTML = '<div class="empty">条件に合う店がありません</div>'; return; }
 
-  $("list").innerHTML = shops.map(s => `
-    <li class="shop" data-id="${s.id}">
-      <div>
-        <a class="name" href="/shop?id=${s.id}">${esc(s.name)}</a>
-        <div class="meta">
-          ${purposeTags(s)}
-          ${s.category ? `<span class="tag">${esc(s.category)}</span>` : ""}
-          ${s.walk_min ? "徒歩" + esc(s.walk_min) + "分" : ""}
-          ${s.price_range ? " / " + esc(s.price_range) : ""}
-        </div>
-        <div class="meta">
-          ${Number(s.review_count)
-            ? `<span class="stars">${stars(s.avg_rating)}</span> ${s.avg_rating}（${s.review_count}件）`
-            : '<span style="color:#bbb">評価なし</span>'}
-          ${s.avg_price ? " / 平均 " + s.avg_price + "円" : ""}
-        </div>
-        ${attrTags(s)}
-      </div>
-      <button class="icon ${s.faved_by_me ? "on" : ""}" onclick="toggleFav(${s.id})">♥ ${s.fav_count}</button>
-    </li>`).join("");
+  const cols = visibleCols();
+  const col = cols.find(c => c.key === sortKey);
+  const rows = [...shops];
+  if (col) {
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const x = col.sort(a), y = col.sort(b);
+      if (x == null || x === -1) return (y == null || y === -1) ? 0 : 1;   // 空欄は常に末尾
+      if (y == null || y === -1) return -1;
+      return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ja")) * dir;
+    });
+  }
+
+  $("list").innerHTML = `
+    <div class="table-wrap"><table class="list">
+      <thead><tr>${cols.map(c => `
+        <th class="${c.cls || ""} ${c.key === sortKey ? "sorted" : ""}" onclick="setSort('${c.key}')">
+          ${esc(c.label)}${c.key === sortKey ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</th>`).join("")}
+      </tr></thead>
+      <tbody>${rows.map(s => `
+        <tr data-id="${s.id}">${cols.map(c => {
+          const v = c.render ? c.render(s) : (esc(s[c.key] ?? "") || none);
+          const title = c.cls === "clip" && s[c.key] ? ` title="${esc(s[c.key])}"` : "";
+          return `<td class="${c.cls || ""}"${title}>${v}</td>`;
+        }).join("")}</tr>`).join("")}
+      </tbody>
+    </table></div>`;
 }
 
 async function toggleFav(id) {
@@ -92,11 +149,11 @@ async function toggleFav(id) {
   catch (e) { alert(e.message); }
 }
 
-// カードのどこを押しても詳細へ（♥ボタンとリンクは除く）
+// 行のどこを押しても詳細へ（♥ボタンとリンクは除く）
 $("list").addEventListener("click", e => {
   if (e.target.closest("button, a")) return;
-  const li = e.target.closest("li.shop");
-  if (li) location.href = "/shop?id=" + li.dataset.id;
+  const tr = e.target.closest("tbody tr");
+  if (tr) location.href = "/shop?id=" + tr.dataset.id;
 });
 
 let timer;

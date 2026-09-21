@@ -1,8 +1,6 @@
 // ===== 登録・編集で共通のフォーム =====
 // mode: "new"（登録）または "edit"（編集）
 
-const PRICE_RANGES = ["〜500円", "500〜800円", "800〜1200円", "1200〜2000円", "2000〜5000円", "5000円〜"];
-
 async function initShopForm(mode) {
   const me = await requireMe();
   const id = param("id");
